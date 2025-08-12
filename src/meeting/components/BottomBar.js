@@ -1,9 +1,3 @@
-import {
-  Constants,
-  useMeeting,
-  usePubSub,
-  useMediaDevice,
-} from "@videosdk.live/react-sdk";
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardIcon,
@@ -33,6 +27,14 @@ import { Dialog, Popover, Transition } from "@headlessui/react";
 import { createPopper } from "@popperjs/core";
 import { useMeetingAppContext } from "../../MeetingAppContextDef";
 import useMediaStream from "../../hooks/useMediaStream";
+
+// Import your Firebase WebRTC components instead of VideoSDK
+import {
+  Constants,
+  useMeeting,
+  usePubSub,
+  useMediaDevice,
+} from "../../FirebaseMeetingProvider"; // Update this path
 
 function PipBTN({ isMobile, isTab }) {
   const { pipMode, setPipMode } = useMeetingAppContext();
@@ -167,24 +169,28 @@ const MicBTN = () => {
   const mMeeting = useMeeting();
   const [mics, setMics] = useState([]);
   const [speakers, setSpeakers] = useState([]);
-  const localMicOn = mMeeting?.localMicOn;
-  const changeMic = mMeeting?.changeMic;
+
+  // Fixed: Use localParticipant directly from meeting context
+  const localMicOn = mMeeting?.localParticipant?.micEnabled ?? false;
+  const toggleMic = mMeeting?.toggleMic;
 
   useMediaDevice({
-    onDeviceChanged
-  })
+    onDeviceChanged,
+  });
 
-  function onDeviceChanged(devices){
+  function onDeviceChanged(devices) {
     getMics();
-    const newSpeakerList = devices.devices.filter(device => device.kind === 'audiooutput');
+    const newSpeakerList = devices.devices.filter(
+      (device) => device.kind === "audiooutput"
+    );
 
     if (newSpeakerList.length > 0) {
-      setSelectedSpeaker({id : newSpeakerList[0].deviceId, label : newSpeakerList[0].label});
+      setSelectedSpeaker({
+        id: newSpeakerList[0].deviceId,
+        label: newSpeakerList[0].label,
+      });
     }
-    
   }
-
-
 
   const getMics = async () => {
     const mics = await getMicrophones();
@@ -213,7 +219,7 @@ const MicBTN = () => {
       <OutlinedButton
         Icon={localMicOn ? MicOnIcon : MicOffIcon}
         onClick={() => {
-          mMeeting.toggleMic();
+          toggleMic && toggleMic();
         }}
         bgColor={localMicOn ? "bg-gray-750" : "bg-white"}
         borderColor={localMicOn && "#ffffff33"}
@@ -243,7 +249,7 @@ const MicBTN = () => {
                           <ChevronDownIcon
                             className="h-4 w-4"
                             style={{
-                              color: mMeeting.localMicOn ? "white" : "black",
+                              color: localMicOn ? "white" : "black",
                             }}
                           />
                         </button>
@@ -270,6 +276,7 @@ const MicBTN = () => {
                               <div className="flex flex-col">
                                 {mics.map(({ deviceId, label }, index) => (
                                   <div
+                                    key={`mics_${deviceId}`}
                                     className={`px-3 py-1 my-1 pl-6 text-white text-left ${
                                       deviceId === selectedMic.id &&
                                       "bg-gray-150"
@@ -280,10 +287,10 @@ const MicBTN = () => {
                                         deviceId === selectedMic.id &&
                                         "bg-gray-150"
                                       }`}
-                                      key={`mics_${deviceId}`}
                                       onClick={() => {
                                         setSelectedMic({ id: deviceId });
-                                        changeMic(deviceId);
+                                        // Note: You may need to implement changeMic in your Firebase provider
+                                        // mMeeting.changeMic && mMeeting.changeMic(deviceId);
                                         close();
                                       }}
                                     >
@@ -303,6 +310,7 @@ const MicBTN = () => {
                               <div className="flex flex-col ">
                                 {speakers.map(({ deviceId, label }, index) => (
                                   <div
+                                    key={`speakers_${deviceId}`}
                                     className={`px-3 py-1 my-1 pl-6 text-white ${
                                       deviceId === selectedSpeaker.id &&
                                       "bg-gray-150"
@@ -313,7 +321,6 @@ const MicBTN = () => {
                                         deviceId === selectedSpeaker.id &&
                                         "bg-gray-150"
                                       }`}
-                                      key={`speakers_${deviceId}`}
                                       onClick={() => {
                                         setSelectedSpeaker({ id: deviceId });
                                         close();
@@ -360,8 +367,9 @@ const WebCamBTN = () => {
   const [webcams, setWebcams] = useState([]);
   const { getVideoTrack } = useMediaStream();
 
-  const localWebcamOn = mMeeting?.localWebcamOn;
-  const changeWebcam = mMeeting?.changeWebcam;
+  // Fixed: Use localParticipant directly from meeting context
+  const localWebcamOn = mMeeting?.localParticipant?.webcamEnabled ?? false;
+  const toggleWebcam = mMeeting?.toggleWebcam;
 
   const getWebcams = async () => {
     let webcams = await getCameras();
@@ -386,14 +394,8 @@ const WebCamBTN = () => {
     <>
       <OutlinedButton
         Icon={localWebcamOn ? WebcamOnIcon : WebcamOffIcon}
-        onClick={async () => {
-          let track;
-          if (!localWebcamOn) {
-            track = await getVideoTrack({
-              webcamId: selectedWebcam.id,
-            });
-          }
-          mMeeting.toggleWebcam(track);
+        onClick={() => {
+          toggleWebcam && toggleWebcam();
         }}
         bgColor={localWebcamOn ? "bg-gray-750" : "bg-white"}
         borderColor={localWebcamOn && "#ffffff33"}
@@ -450,6 +452,7 @@ const WebCamBTN = () => {
                               <div className="flex flex-col">
                                 {webcams.map(({ deviceId, label }, index) => (
                                   <div
+                                    key={`output_webcams_${deviceId}`}
                                     className={`px-3 py-1 my-1 pl-6 text-white ${
                                       deviceId === selectedWebcam.id &&
                                       "bg-gray-150"
@@ -460,10 +463,10 @@ const WebCamBTN = () => {
                                         deviceId === selectedWebcam.id &&
                                         "bg-gray-150"
                                       }`}
-                                      key={`output_webcams_${deviceId}`}
                                       onClick={() => {
                                         setSelectedWebcam({ id: deviceId });
-                                        changeWebcam(deviceId);
+                                        // Note: You may need to implement changeWebcam in your Firebase provider
+                                        // mMeeting.changeWebcam && mMeeting.changeWebcam(deviceId);
                                         close();
                                       }}
                                     >
@@ -501,31 +504,110 @@ const WebCamBTN = () => {
 
 export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
   const { sideBarMode, setSideBarMode } = useMeetingAppContext();
+
   const RaiseHandBTN = ({ isMobile, isTab }) => {
-    const { publish } = usePubSub("RAISE_HAND");
-    const RaiseHand = () => {
-      publish("Raise Hand");
+    const [isHandRaised, setIsHandRaised] = useState(false);
+    const { localParticipant } = useMeeting();
+    const autoLowerTimeoutRef = useRef(null);
+
+    const { publish } = usePubSub("RAISE_HAND", {
+      onMessageReceived: (data) => {
+        const localParticipantId = localParticipant?.id;
+
+        // Only handle own messages to update button state
+        if (data.senderId === localParticipantId) {
+          if (data.message === "Raise Hand") {
+            setIsHandRaised(true);
+          } else if (data.message === "Lower Hand") {
+            setIsHandRaised(false);
+          }
+        }
+      },
+    });
+
+    const clearAutoLowerTimeout = () => {
+      if (autoLowerTimeoutRef.current) {
+        clearTimeout(autoLowerTimeoutRef.current);
+        autoLowerTimeoutRef.current = null;
+      }
     };
 
-    return isMobile || isTab ? (
-      <MobileIconButton
-        id="RaiseHandBTN"
-        tooltipTitle={"Raise hand"}
-        Icon={RaiseHandIcon}
-        onClick={RaiseHand}
-        buttonText={"Raise Hand"}
-      />
-    ) : (
-      <OutlinedButton
-        onClick={RaiseHand}
-        tooltip={"Raise Hand"}
-        Icon={RaiseHandIcon}
-      />
+    const RaiseHand = async () => {
+      try {
+        if (!isHandRaised) {
+          // Raise hand
+          await publish("Raise Hand");
+          setIsHandRaised(true);
+
+          // Auto-lower hand after 60 seconds
+          autoLowerTimeoutRef.current = setTimeout(() => {
+            lowerHand();
+          }, 60000);
+        } else {
+          // Lower hand
+          lowerHand();
+        }
+      } catch (error) {
+        console.error("Error with raise hand:", error);
+      }
+    };
+
+    const lowerHand = async () => {
+      try {
+        clearAutoLowerTimeout();
+        await publish("Lower Hand");
+        setIsHandRaised(false);
+      } catch (error) {
+        console.error("Error lowering hand:", error);
+      }
+    };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+      return () => {
+        clearAutoLowerTimeout();
+      };
+    }, []);
+
+    // Expose lowerHand function for external use (like from notification)
+    useEffect(() => {
+      // You could use a context or ref to expose this function
+      // For now, we'll keep it simple
+      window.lowerCurrentUserHand = lowerHand;
+
+      return () => {
+        delete window.lowerCurrentUserHand;
+      };
+    }, []);
+
+    return (
+      <>
+        {/* Raise Hand Button - No modal here anymore */}
+        {isMobile || isTab ? (
+          <MobileIconButton
+            id="RaiseHandBTN"
+            tooltipTitle={isHandRaised ? "Lower hand" : "Raise hand"}
+            Icon={RaiseHandIcon}
+            onClick={RaiseHand}
+            buttonText={isHandRaised ? "Lower Hand" : "Raise Hand"}
+            isFocused={isHandRaised}
+          />
+        ) : (
+          <OutlinedButton
+            onClick={RaiseHand}
+            tooltip={isHandRaised ? "Lower Hand" : "Raise Hand"}
+            Icon={RaiseHandIcon}
+            isFocused={isHandRaised}
+          />
+        )}
+      </>
     );
   };
-
   const RecordingBTN = () => {
-    const { startRecording, stopRecording, recordingState } = useMeeting();
+    // Note: Recording functionality needs to be implemented in Firebase provider
+    const mMeeting = useMeeting();
+    const [recordingState, setRecordingState] = useState(null);
+
     const defaultOptions = {
       loop: true,
       autoplay: true,
@@ -557,9 +639,11 @@ export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
       const isRecording = isRecordingRef.current;
 
       if (isRecording) {
-        stopRecording();
+        // Implement stopRecording in your Firebase provider
+        console.log("Stop recording");
       } else {
-        startRecording();
+        // Implement startRecording in your Firebase provider
+        console.log("Start recording");
       }
     };
 
@@ -585,56 +669,62 @@ export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
     );
   };
 
+  // UPDATED SCREEN SHARE BUTTON WITH WORKING FUNCTIONALITY
   const ScreenShareBTN = ({ isMobile, isTab }) => {
-    const { localScreenShareOn, toggleScreenShare, presenterId } = useMeeting();
+    const mMeeting = useMeeting();
+    const localScreenShareOn =
+      mMeeting?.localParticipant?.screenShareEnabled ?? false;
+    const presenterId = mMeeting?.presenterId;
+    const isLocalPresenting = presenterId === mMeeting?.localParticipant?.id;
+    const toggleScreenShare = mMeeting?.toggleScreenShare;
+
+    const handleScreenShareClick = async () => {
+      if (!toggleScreenShare) {
+        console.error("toggleScreenShare function not available");
+        return;
+      }
+
+      try {
+        await toggleScreenShare();
+      } catch (error) {
+        console.error("Failed to toggle screen share:", error);
+      }
+    };
+
+    // Determine button state and tooltip
+    const getTooltipText = () => {
+      if (presenterId) {
+        if (isLocalPresenting) {
+          return "Stop Presenting";
+        } else {
+          return "Someone else is presenting";
+        }
+      } else {
+        return "Present Screen";
+      }
+    };
+
+    const isDisabled = presenterId && !isLocalPresenting;
 
     return isMobile || isTab ? (
       <MobileIconButton
         id="screen-share-btn"
-        tooltipTitle={
-          presenterId
-            ? localScreenShareOn
-              ? "Stop Presenting"
-              : null
-            : "Present Screen"
-        }
-        buttonText={
-          presenterId
-            ? localScreenShareOn
-              ? "Stop Presenting"
-              : null
-            : "Present Screen"
-        }
+        tooltipTitle={getTooltipText()}
+        buttonText={getTooltipText()}
         isFocused={localScreenShareOn}
         Icon={ScreenShareIcon}
-        onClick={() => {
-          toggleScreenShare();
-        }}
-        disabled={
-          presenterId
-            ? localScreenShareOn
-              ? false
-              : true
-            : isMobile
-            ? true
-            : false
-        }
+        onClick={handleScreenShareClick}
+        disabled={isDisabled}
       />
     ) : (
       <OutlinedButton
         Icon={ScreenShareIcon}
-        onClick={() => {
-          toggleScreenShare();
-        }}
+        onClick={handleScreenShareClick}
         isFocused={localScreenShareOn}
-        tooltip={
-          presenterId
-            ? localScreenShareOn
-              ? "Stop Presenting"
-              : null
-            : "Present Screen"
-        }
-        disabled={presenterId ? (localScreenShareOn ? false : true) : false}
+        tooltip={getTooltipText()}
+        disabled={isDisabled}
+        bgColor={localScreenShareOn ? "bg-blue-600" : undefined}
+        focusIconColor={localScreenShareOn ? "white" : undefined}
       />
     );
   };
@@ -696,7 +786,7 @@ export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
             s === sideBarModes.PARTICIPANTS ? null : sideBarModes.PARTICIPANTS
           );
         }}
-        badge={`${new Map(participants)?.size}`}
+        badge={`${participants?.size || 0}`}
       />
     ) : (
       <OutlinedButton
@@ -708,7 +798,7 @@ export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
         }}
         isFocused={sideBarMode === sideBarModes.PARTICIPANTS}
         tooltip={"View \nParticipants"}
-        badge={`${new Map(participants)?.size}`}
+        badge={`${participants?.size || 0}`}
       />
     );
   };
@@ -825,6 +915,7 @@ export function BottomBar({ bottomBarHeight, setIsMeetingLeft }) {
                       {otherFeatures.map(({ icon }) => {
                         return (
                           <div
+                            key={icon}
                             className={`grid items-center justify-center ${
                               icon === BottomBarButtonTypes.MEETING_ID_COPY
                                 ? "col-span-7 sm:col-span-5 md:col-span-3"

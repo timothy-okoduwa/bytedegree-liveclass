@@ -1,7 +1,9 @@
-import { PaperAirplaneIcon } from "@heroicons/react/solid";
-import { useMeeting, usePubSub } from "@videosdk.live/react-sdk";
+import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import { useMeeting, usePubSub } from "../../FirebaseMeetingProvider"; // FIXED: Import from your Firebase provider
 import React, { useEffect, useRef, useState } from "react";
 import { formatAMPM, json_verify, nameTructed } from "../../utils/helper";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { db } from "../../firebase-config"; // Add your firebase config import
 
 const ChatMessage = ({ senderId, senderName, text, timestamp }) => {
   const mMeeting = useMeeting();
@@ -30,7 +32,11 @@ const ChatMessage = ({ senderId, senderName, text, timestamp }) => {
         </div>
         <div className="mt-1">
           <p className="text-xs italic" style={{ color: "#ffffff80" }}>
-            {formatAMPM(new Date(timestamp))}
+            {formatAMPM(
+              new Date(
+                timestamp?.seconds ? timestamp.seconds * 1000 : timestamp
+              )
+            )}
           </p>
         </div>
       </div>
@@ -48,8 +54,8 @@ const ChatInput = ({ inputHeight }) => {
       className="w-full flex items-center px-2"
       style={{ height: inputHeight }}
     >
-      <div class="relative  w-full">
-        <span class="absolute inset-y-0 right-0 flex mr-2 rotate-90 ">
+      <div className="relative w-full">
+        <span className="absolute inset-y-0 right-0 flex mr-2 rotate-90">
           <button
             disabled={message.length < 2}
             type="submit"
@@ -76,7 +82,7 @@ const ChatInput = ({ inputHeight }) => {
           type="text"
           className="py-4 text-base text-white border-gray-400 border bg-gray-750 rounded pr-10 pl-2 focus:outline-none w-full"
           placeholder="Write your message"
-          autocomplete="off"
+          autoComplete="off"
           ref={input}
           value={message}
           onChange={(e) => {
@@ -104,24 +110,39 @@ const ChatInput = ({ inputHeight }) => {
 
 const ChatMessages = ({ listHeight }) => {
   const listRef = useRef();
-  const { messages } = usePubSub("CHAT");
+  const { meetingId } = useMeeting();
+  const [messages, setMessages] = useState([]);
 
-  const scrollToBottom = (data) => {
-    if (!data) {
-      if (listRef.current) {
-        listRef.current.scrollTop = listRef.current.scrollHeight;
-      }
-    } else {
-      const { text } = data;
+  // FIXED: Directly listen to Firebase messages instead of using usePubSub for reading
+  useEffect(() => {
+    if (!meetingId) return;
 
-      if (json_verify(text)) {
-        const { type } = JSON.parse(text);
-        if (type === "CHAT") {
-          if (listRef.current) {
-            listRef.current.scrollTop = listRef.current.scrollHeight;
-          }
+    const messagesRef = collection(db, "meetings", meetingId, "messages");
+    const q = query(messagesRef, orderBy("timestamp", "asc"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const chatMessages = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.topic === "CHAT") {
+          chatMessages.push({
+            id: doc.id,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            message: data.message,
+            timestamp: data.timestamp,
+          });
         }
-      }
+      });
+      setMessages(chatMessages);
+    });
+
+    return () => unsubscribe();
+  }, [meetingId]);
+
+  const scrollToBottom = () => {
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   };
 
@@ -137,7 +158,10 @@ const ChatMessages = ({ listHeight }) => {
           return (
             <ChatMessage
               key={`chat_item_${i}`}
-              {...{ senderId, senderName, text: message, timestamp }}
+              senderId={senderId}
+              senderName={senderName}
+              text={message}
+              timestamp={timestamp}
             />
           );
         })}

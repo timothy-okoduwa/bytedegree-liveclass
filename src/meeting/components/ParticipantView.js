@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
-import { useMeeting } from "@videosdk.live/react-sdk";
+// Updated import - use Firebase provider instead of VideoSDK
+import { useMeeting } from "../../FirebaseMeetingProvider";
 import { MemoizedParticipantGrid } from "../../components/ParticipantGrid";
 
 function ParticipantsViewer({ isPresenting }) {
   const {
     participants,
-    pinnedParticipants,
+    // Note: pinnedParticipants is VideoSDK specific - we'll implement basic version
+    // pinnedParticipants,
     activeSpeakerId,
     localParticipant,
     localScreenShareOn,
@@ -13,39 +15,50 @@ function ParticipantsViewer({ isPresenting }) {
   } = useMeeting();
 
   const participantIds = useMemo(() => {
-    const pinnedParticipantId = [...pinnedParticipants.keys()].filter(
-      (participantId) => {
-        return participantId !== localParticipant.id;
-      }
-    );
+    // For Firebase implementation, we'll simplify the logic since pinnedParticipants
+    // is a VideoSDK-specific feature. You can implement pinning later if needed.
+
+    if (!participants || !localParticipant) {
+      return [];
+    }
+
+    // Get all participant IDs except local participant
     const regularParticipantIds = [...participants.keys()].filter(
-      (participantId) => {
-        return (
-          ![...pinnedParticipants.keys()].includes(participantId) &&
-          localParticipant.id !== participantId
-        );
-      }
+      (participantId) => participantId !== localParticipant.id
     );
 
-    const ids = [
-      localParticipant.id,
-      ...pinnedParticipantId,
-      ...regularParticipantIds,
-    ].slice(0, isPresenting ? 6 : 16);
+    // Start with local participant, then add others
+    const ids = [localParticipant.id, ...regularParticipantIds].slice(
+      0,
+      isPresenting ? 6 : 16
+    );
 
-    if (activeSpeakerId) {
+    // If there's an active speaker and it's not already in the list, replace the last one
+    if (activeSpeakerId && ids.length > 1) {
       if (!ids.includes(activeSpeakerId)) {
         ids[ids.length - 1] = activeSpeakerId;
       }
     }
+
     return ids;
   }, [
     participants,
     activeSpeakerId,
-    pinnedParticipants,
+    // Remove pinnedParticipants dependency for now
+    // pinnedParticipants,
     presenterId,
     localScreenShareOn,
+    localParticipant,
   ]);
+
+  // Add safety check to prevent rendering before meeting is initialized
+  if (!participants || !localParticipant) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-white">Loading participants...</div>
+      </div>
+    );
+  }
 
   return (
     <MemoizedParticipantGrid

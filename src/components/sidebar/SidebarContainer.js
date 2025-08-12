@@ -1,4 +1,4 @@
-import { useMeeting } from "@videosdk.live/react-sdk";
+import { useMeeting } from "../../FirebaseMeetingProvider"; // FIXED: Import from your Firebase provider
 import React, { Fragment } from "react";
 import useIsMobile from "../../hooks/useIsMobile";
 import useIsTab from "../../hooks/useIsTab";
@@ -20,6 +20,9 @@ const SideBarTabView = ({
 }) => {
   const { participants } = useMeeting();
   const { sideBarMode } = useMeetingAppContext();
+
+  // FIXED: Properly handle Firebase participants Map
+  const participantCount = participants?.size || 0;
 
   return (
     <div
@@ -57,7 +60,7 @@ const SideBarTabView = ({
                     ? `${
                         sideBarMode.charAt(0).toUpperCase() +
                           sideBarMode.slice(1).toLowerCase() || ""
-                      } (${new Map(participants)?.size})`
+                      } (${participantCount})`
                     : sideBarMode.charAt(0).toUpperCase() +
                         sideBarMode.slice(1).toLowerCase() || ""}
                 </p>

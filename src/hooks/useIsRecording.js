@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Constants, useMeeting } from "@videosdk.live/react-sdk";
+// Update this import path to point to your Firebase provider
+import { Constants, useMeeting } from "../FirebaseMeetingProvider";
 
 const useIsRecording = () => {
   const { recordingState } = useMeeting();

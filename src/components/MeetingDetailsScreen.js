@@ -15,6 +15,45 @@ export function MeetingDetailsScreen({
   const [iscreateMeetingClicked, setIscreateMeetingClicked] = useState(false);
   const [isJoinMeetingClicked, setIsJoinMeetingClicked] = useState(false);
 
+  // Function to validate meeting ID format
+  const isValidMeetingId = (id) => {
+    // Remove whitespace and convert to lowercase for validation
+    const cleanId = id.trim();
+
+    // Check if meeting ID is not empty and has reasonable length
+    if (!cleanId || cleanId.length < 3) {
+      return false;
+    }
+
+    // Accept various formats:
+    // 1. Original format: XXXX-XXXX-XXXX
+    // 2. Firebase generated IDs (alphanumeric)
+    // 3. Any reasonable meeting ID format
+
+    // Check for original VideoSDK format
+    if (cleanId.match(/^\w{4}-\w{4}-\w{4}$/)) {
+      return true;
+    }
+
+    // Check for Firebase/custom format (alphanumeric, possibly with dashes)
+    if (cleanId.match(/^[a-zA-Z0-9-_]{6,50}$/)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleJoinMeeting = () => {
+    // Reset error state
+    setMeetingIdError(false);
+
+    if (isValidMeetingId(meetingId)) {
+      onClickJoin(meetingId.trim());
+    } else {
+      setMeetingIdError(true);
+    }
+  };
+
   return (
     <div
       className={`flex flex-1 flex-col justify-center w-full md:p-[6px] sm:p-1 p-1.5`}
@@ -47,12 +86,16 @@ export function MeetingDetailsScreen({
             defaultValue={meetingId}
             onChange={(e) => {
               setMeetingId(e.target.value);
+              // Clear error when user starts typing
+              if (meetingIdError) {
+                setMeetingIdError(false);
+              }
             }}
             placeholder={"Enter meeting Id"}
             className="px-4 py-3 bg-gray-650 rounded-xl text-white w-full text-center"
           />
           {meetingIdError && (
-            <p className="text-xs text-red-600">{`Please enter valid meetingId`}</p>
+            <p className="text-xs text-red-600">{`Please enter a valid meeting ID`}</p>
           )}
         </>
       ) : null}
@@ -66,20 +109,16 @@ export function MeetingDetailsScreen({
             className="px-4 py-3 mt-5 bg-gray-650 rounded-xl text-white w-full text-center"
           />
 
-          {/* <p className="text-xs text-white mt-1 text-center">
-            Your name will help everyone identify you in the meeting.
-          </p> */}
           <button
             disabled={participantName.length < 3}
-            className={`w-full ${participantName.length < 3 ? "bg-gray-650" : "bg-purple-350"
-              }  text-white px-2 py-3 rounded-xl mt-5`}
+            className={`w-full ${
+              participantName.length < 3 ? "bg-gray-650" : "bg-purple-350"
+            }  text-white px-2 py-3 rounded-xl mt-5`}
             onClick={(e) => {
               if (iscreateMeetingClicked) {
                 onClickStartMeeting();
               } else {
-                if (meetingId.match("\\w{4}\\-\\w{4}\\-\\w{4}")) {
-                  onClickJoin(meetingId);
-                } else setMeetingIdError(true);
+                handleJoinMeeting();
               }
             }}
           >
@@ -95,24 +134,21 @@ export function MeetingDetailsScreen({
               className="w-full bg-purple-350 text-white px-2 py-3 rounded-xl"
               onClick={async (e) => {
                 const { meetingId, err } = await _handleOnCreateMeeting();
-              
+
                 if (meetingId) {
                   setMeetingId(meetingId);
                   setIscreateMeetingClicked(true);
                 } else {
-                  toast(
-                    `${err}`,
-                    {
-                      position: "bottom-left",
-                      autoClose: 4000,
-                      hideProgressBar: true,
-                      closeButton: false,
-                      pauseOnHover: true,
-                      draggable: true,
-                      progress: undefined,
-                      theme: "light",
-                    }
-                  );
+                  toast(`${err}`, {
+                    position: "bottom-left",
+                    autoClose: 4000,
+                    hideProgressBar: true,
+                    closeButton: false,
+                    pauseOnHover: true,
+                    draggable: true,
+                    progress: undefined,
+                    theme: "light",
+                  });
                 }
               }}
             >

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MeetingDetailsScreen } from "../MeetingDetailsScreen";
-import { createMeeting, getToken, validateMeeting } from "../../api";
+import { createMeeting, getToken, validateMeeting } from "../../firebase-api"; // Changed from ../../api
 import ConfirmBox from "../ConfirmBox";
 import { Constants, useMediaDevice } from "@videosdk.live/react-sdk";
 import useMediaStream from "../../hooks/useMediaStream";
@@ -96,7 +96,6 @@ export function JoiningScreen({
 
   useEffect(() => {
     if (webcamOn) {
-
       // Close the existing video track if there's a new one
       if (videoTrackRef.current && videoTrackRef.current !== videoTrack) {
         videoTrackRef.current.stop(); // Stop the existing video track
@@ -109,7 +108,7 @@ export function JoiningScreen({
         !videoPlayerRef.current.paused &&
         !videoPlayerRef.current.ended &&
         videoPlayerRef.current.readyState >
-        videoPlayerRef.current.HAVE_CURRENT_DATA;
+          videoPlayerRef.current.HAVE_CURRENT_DATA;
 
       if (videoTrack) {
         const videoSrcObject = new MediaStream([videoTrack]);
@@ -140,7 +139,7 @@ export function JoiningScreen({
 
   useEffect(() => {
     checkMediaPermission();
-    return () => { };
+    return () => {};
   }, []);
 
   const _toggleWebcam = () => {
@@ -182,52 +181,105 @@ export function JoiningScreen({
         currentvideoTrack.stop();
       }
 
-      const stream = await getVideoTrack({
-        webcamId: deviceId,
-      });
-      setCustomVideoStream(stream);
-      const videoTracks = stream?.getVideoTracks();
-      const videoTrack = videoTracks?.length ? videoTracks[0] : null;
-      setVideoTrack(videoTrack);
+      try {
+        const videoTrack = await getVideoTrack({
+          webcamId: deviceId,
+        });
+
+        if (videoTrack && videoTrack.kind === "video") {
+          // Create a MediaStream from the track
+          const stream = new MediaStream([videoTrack]);
+          setCustomVideoStream(stream);
+          setVideoTrack(videoTrack);
+        } else {
+          console.error("Invalid video track received:", videoTrack);
+          setCustomVideoStream(null);
+          setVideoTrack(null);
+        }
+      } catch (error) {
+        console.error("Error changing webcam:", error);
+        setCustomVideoStream(null);
+        setVideoTrack(null);
+      }
     }
   };
+
   const changeMic = async (deviceId) => {
-
-
     if (micOn) {
       const currentAudioTrack = audioTrackRef.current;
       currentAudioTrack && currentAudioTrack.stop();
-      const stream = await getAudioTrack({
-        micId: deviceId,
-      });
-      setCustomAudioStream(stream);
-      const audioTracks = stream?.getAudioTracks();
-      const audioTrack = audioTracks.length ? audioTracks[0] : null;
-      clearInterval(audioAnalyserIntervalRef.current);
-      setAudioTrack(audioTrack);
+
+      try {
+        const audioTrack = await getAudioTrack({
+          micId: deviceId,
+        });
+
+        if (audioTrack && audioTrack.kind === "audio") {
+          // Create a MediaStream from the track
+          const stream = new MediaStream([audioTrack]);
+          setCustomAudioStream(stream);
+          clearInterval(audioAnalyserIntervalRef.current);
+          setAudioTrack(audioTrack);
+        } else {
+          console.error("Invalid audio track received:", audioTrack);
+          setCustomAudioStream(null);
+          setAudioTrack(null);
+        }
+      } catch (error) {
+        console.error("Error changing microphone:", error);
+        setCustomAudioStream(null);
+        setAudioTrack(null);
+      }
     }
   };
 
   const getDefaultMediaTracks = async ({ mic, webcam }) => {
-
     if (mic) {
-      const stream = await getAudioTrack({
-        micId: selectedMic.id,
-      });
-      setCustomAudioStream(stream);
-      const audioTracks = stream?.getAudioTracks();
-      const audioTrack = audioTracks.length ? audioTracks[0] : null;
-      setAudioTrack(audioTrack);
+      try {
+        const audioTrack = await getAudioTrack({
+          micId: selectedMic.id,
+        });
+
+        // Check if we received a MediaStreamTrack
+        if (audioTrack && audioTrack.kind === "audio") {
+          // Create a MediaStream from the track
+          const stream = new MediaStream([audioTrack]);
+          setCustomAudioStream(stream);
+          setAudioTrack(audioTrack);
+        } else {
+          console.error("Invalid audio track received:", audioTrack);
+          setCustomAudioStream(null);
+          setAudioTrack(null);
+        }
+      } catch (error) {
+        console.error("Error getting audio track:", error);
+        setCustomAudioStream(null);
+        setAudioTrack(null);
+      }
     }
 
     if (webcam) {
-      const stream = await getVideoTrack({
-        webcamId: selectedWebcam.id,
-      });
-      setCustomVideoStream(stream);
-      const videoTracks = stream?.getVideoTracks();
-      const videoTrack = videoTracks?.length ? videoTracks[0] : null;
-      setVideoTrack(videoTrack);
+      try {
+        const videoTrack = await getVideoTrack({
+          webcamId: selectedWebcam.id,
+        });
+
+        // Check if we received a MediaStreamTrack
+        if (videoTrack && videoTrack.kind === "video") {
+          // Create a MediaStream from the track
+          const stream = new MediaStream([videoTrack]);
+          setCustomVideoStream(stream);
+          setVideoTrack(videoTrack);
+        } else {
+          console.error("Invalid video track received:", videoTrack);
+          setCustomVideoStream(null);
+          setVideoTrack(null);
+        }
+      } catch (error) {
+        console.error("Error getting video track:", error);
+        setCustomVideoStream(null);
+        setVideoTrack(null);
+      }
     }
   };
 
@@ -345,13 +397,11 @@ export function JoiningScreen({
     }
   };
 
-
-
   const getAudioDevices = async () => {
     try {
       if (permissonAvaialble.current?.isMicrophonePermissionAllowed) {
         let mics = await getMicrophones();
-        console.log(mics)
+        console.log(mics);
         let speakers = await getPlaybackDevices();
         const hasMic = mics.length > 0;
         if (hasMic) {
@@ -371,10 +421,9 @@ export function JoiningScreen({
     }
   };
 
-
   useEffect(() => {
-    getAudioDevices()
-  }, [])
+    getAudioDevices();
+  }, []);
 
   const ButtonWithTooltip = ({ onClick, onState, OnIcon, OffIcon }) => {
     const btnRef = useRef();
@@ -502,13 +551,13 @@ export function JoiningScreen({
                     setVideoTrack={setVideoTrack}
                     onClickStartMeeting={onClickStartMeeting}
                     onClickJoin={async (id) => {
-                      const token = await getToken();
+                      // Updated to use Firebase API
                       const { meetingId, err } = await validateMeeting({
                         roomId: id,
-                        token,
+                        token: null, // No token needed for Firebase
                       });
                       if (meetingId === id) {
-                        setToken(token);
+                        setToken(null); // Set to null since no token needed
                         setMeetingId(id);
                         onClickStartMeeting();
                       } else {
@@ -525,11 +574,13 @@ export function JoiningScreen({
                       }
                     }}
                     _handleOnCreateMeeting={async () => {
-                      const token = await getToken();
-                      const { meetingId, err } = await createMeeting({ token });
+                      // Updated to use Firebase API
+                      const { meetingId, err } = await createMeeting({
+                        token: null,
+                      });
 
                       if (meetingId) {
-                        setToken(token);
+                        setToken(null); // Set to null since no token needed
                         setMeetingId(meetingId);
                       }
                       return { meetingId: meetingId, err: err };

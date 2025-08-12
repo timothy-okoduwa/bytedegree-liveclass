@@ -8,6 +8,7 @@
     "@heroicons/react": "^2.2.0",
     "@popperjs/core": "^2.11.8",
     "@videosdk.live/react-sdk": "^0.2.1",
+    "firebase": "^12.1.0",
     "lottie-react": "^2.4.1",
     "postcss-flexbugs-fixes": "^5.0.2",
     "postcss-loader": "^8.1.1",

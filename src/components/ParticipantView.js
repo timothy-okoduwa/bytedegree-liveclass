@@ -1,6 +1,6 @@
 import { Popover, Transition } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useParticipant } from "@videosdk.live/react-sdk";
+import { useParticipant } from "../FirebaseMeetingProvider";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { useMediaQuery } from "react-responsive";
@@ -13,6 +13,7 @@ import SpeakerIcon from "../icons/SpeakerIcon";
 import { getQualityScore, nameTructed } from "../utils/common";
 import * as ReactDOM from "react-dom";
 import { useMeetingAppContext } from "../MeetingAppContextDef";
+
 export const CornerDisplayName = ({
   participantId,
   isPresenting,
@@ -56,48 +57,43 @@ export const CornerDisplayName = ({
 
   const show = useMemo(() => mouseOver, [mouseOver]);
 
-  const {
-    webcamStream,
-    micStream,
-    screenShareStream,
-    getVideoStats,
-    getAudioStats,
-    getShareStats,
-    getShareAudioStats
-  } = useParticipant(participantId);
+  const { webcamStream, micStream, screenShareStream } =
+    useParticipant(participantId);
 
   const statsIntervalIdRef = useRef();
-  const [score, setScore] = useState({});
+  const [score, setScore] = useState(10); // Default good score for Firebase
   const [audioStats, setAudioStats] = useState({});
   const [videoStats, setVideoStats] = useState({});
 
+  // Simplified stats update for Firebase (WebRTC stats are more complex)
   const updateStats = async () => {
-    let stats = [];
-    let audioStats = [];
-    let videoStats = [];
-    if (isPresenting) {
-      stats = await getShareStats();
+    try {
+      // Using mock data for now - you can implement WebRTC stats later
+      const mockStats = {
+        rtt: Math.floor(Math.random() * 100) + 20,
+        jitter: Math.random() * 10,
+        packetsLost: Math.floor(Math.random() * 5),
+        totalPackets: 1000 + Math.floor(Math.random() * 500),
+        bitrate: 500 + Math.random() * 1000,
+        framerate: 30,
+        width: 1280,
+        height: 720,
+        codec: "VP8",
+      };
 
-    } else if (webcamStream) {
-      stats = await getVideoStats();
-    } else if (micStream) {
-      stats = await getAudioStats();
+      let qualityScore = 10;
+      if (mockStats.rtt > 100) qualityScore -= 2;
+      if (mockStats.jitter > 5) qualityScore -= 2;
+      if (mockStats.packetsLost / mockStats.totalPackets > 0.02)
+        qualityScore -= 3;
+
+      setScore(Math.max(1, qualityScore));
+      setAudioStats([mockStats]);
+      setVideoStats([mockStats]);
+    } catch (error) {
+      console.log("Stats update error:", error);
+      setScore(8);
     }
-
-    if (webcamStream || micStream || isPresenting) {
-      videoStats = isPresenting ? await getShareStats() : await getVideoStats();
-      audioStats = isPresenting ? await getShareAudioStats() : await getAudioStats();
-    }
-
-    let score = stats
-      ? stats.length > 0
-        ? getQualityScore(stats[0])
-        : 100
-      : 100;
-
-    setScore(score);
-    setAudioStats(audioStats);
-    setVideoStats(videoStats);
   };
 
   const qualityStateArray = [
@@ -153,18 +149,18 @@ export const CornerDisplayName = ({
       audio: "-",
       video:
         videoStats &&
-        (videoStats[0]?.size?.framerate === null ||
-          videoStats[0]?.size?.framerate === undefined)
+        (videoStats[0]?.framerate === null ||
+          videoStats[0]?.framerate === undefined)
           ? "-"
-          : `${videoStats ? videoStats[0]?.size?.framerate : "-"}`,
+          : `${videoStats ? videoStats[0]?.framerate : "-"}`,
     },
     {
       label: "Resolution",
       audio: "-",
       video: videoStats
-        ? videoStats && videoStats[0]?.size?.width === null
+        ? videoStats && videoStats[0]?.width === null
           ? "-"
-          : `${videoStats[0]?.size?.width}x${videoStats[0]?.size?.height}`
+          : `${videoStats[0]?.width}x${videoStats[0]?.height}`
         : "-",
     },
     {
@@ -175,26 +171,12 @@ export const CornerDisplayName = ({
     {
       label: "Cur. Layers",
       audio: "-",
-      video:
-        videoStats && !isLocal
-          ? videoStats && videoStats[0]?.currentSpatialLayer === null
-            ? "-"
-            : `S:${videoStats[0]?.currentSpatialLayer || 0} T:${
-                videoStats[0]?.currentTemporalLayer || 0
-              }`
-          : "-",
+      video: "-",
     },
     {
       label: "Pref. Layers",
       audio: "-",
-      video:
-        videoStats && !isLocal
-          ? videoStats && videoStats[0]?.preferredSpatialLayer === null
-            ? "-"
-            : `S:${videoStats[0]?.preferredSpatialLayer || 0} T:${
-                videoStats[0]?.preferredTemporalLayer || 0
-              }`
-          : "-",
+      video: "-",
     },
   ];
 
@@ -206,7 +188,7 @@ export const CornerDisplayName = ({
         clearInterval(statsIntervalIdRef.current);
       }
 
-      statsIntervalIdRef.current = setInterval(updateStats, 500);
+      statsIntervalIdRef.current = setInterval(updateStats, 2000);
     } else {
       if (statsIntervalIdRef.current) {
         clearInterval(statsIntervalIdRef.current);
@@ -355,6 +337,7 @@ export const CornerDisplayName = ({
                                 {qualityStateArray.map((item, index) => {
                                   return (
                                     <div
+                                      key={index}
                                       className="flex"
                                       style={{
                                         borderBottom:
@@ -425,47 +408,123 @@ export function ParticipantView({ participantId }) {
 
   const { selectedSpeaker } = useMeetingAppContext();
   const micRef = useRef(null);
+  const videoRef = useRef(null);
   const [mouseOver, setMouseOver] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  // Debug logging
+  useEffect(() => {
+    console.log(`ParticipantView ${participantId}:`, {
+      displayName,
+      webcamOn,
+      micOn,
+      hasWebcamStream: !!webcamStream,
+      hasMicStream: !!micStream,
+      isLocal,
+      webcamStreamTrack: webcamStream?.track,
+    });
+  }, [
+    participantId,
+    displayName,
+    webcamOn,
+    micOn,
+    webcamStream,
+    micStream,
+    isLocal,
+  ]);
 
   useEffect(() => {
-    const isFirefox =
-          navigator.userAgent.toLowerCase().indexOf("firefox") > -1;
+    const isFirefox = navigator.userAgent.toLowerCase().indexOf("firefox") > -1;
     if (micRef.current) {
-        try{
-          if (!isFirefox){
-            micRef.current.setSinkId(selectedSpeaker.id);
-          }
-        }catch(err){
-          console.log("Setting speaker device failed", err);
+      try {
+        if (!isFirefox) {
+          micRef.current.setSinkId(selectedSpeaker?.id);
         }
-      } 
-  }, [ selectedSpeaker]);
-
-  useEffect(() => {
-    if (micRef.current) {
-      if (micOn && micStream) {
-        const mediaStream = new MediaStream();
-        mediaStream.addTrack(micStream.track);
-        micRef.current.srcObject = mediaStream;
-        micRef.current
-          .play()
-          .catch((error) =>
-            console.error("micRef.current.play() failed", error)
-          );
-        }else {
-          micRef.current.srcObject = null;
-        }
+      } catch (err) {
+        console.log("Setting speaker device failed", err);
       }
-  }, [micStream, micOn, micRef])
-
-  const webcamMediaStream = useMemo(() => {
-    if (webcamOn && webcamStream) {
-      const mediaStream = new MediaStream();
-      mediaStream.addTrack(webcamStream.track);
-      return mediaStream;
     }
-  }, [webcamStream, webcamOn]);
-  return mode === "SEND_AND_RECV" ? (
+  }, [selectedSpeaker]);
+
+  // Handle audio stream
+  useEffect(() => {
+    if (micRef.current) {
+      if (micOn && micStream && micStream.track) {
+        try {
+          const mediaStream = new MediaStream();
+          mediaStream.addTrack(micStream.track);
+          micRef.current.srcObject = mediaStream;
+          micRef.current
+            .play()
+            .catch((error) =>
+              console.error("micRef.current.play() failed", error)
+            );
+        } catch (error) {
+          console.error("Error setting up audio stream:", error);
+        }
+      } else {
+        micRef.current.srcObject = null;
+      }
+    }
+  }, [micStream, micOn, micRef]);
+
+  // Handle video stream - FIXED VERSION
+  useEffect(() => {
+    if (videoRef.current) {
+      if (webcamOn && webcamStream && webcamStream.track) {
+        try {
+          console.log(`Setting up video for participant ${participantId}`, {
+            webcamStream,
+            track: webcamStream.track,
+            trackState: webcamStream.track.readyState,
+            trackEnabled: webcamStream.track.enabled,
+          });
+
+          const mediaStream = new MediaStream();
+          mediaStream.addTrack(webcamStream.track);
+
+          videoRef.current.srcObject = mediaStream;
+          setVideoError(false);
+
+          // Ensure video plays
+          const playPromise = videoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log(
+                  `Video playing successfully for participant ${participantId}`
+                );
+              })
+              .catch((error) => {
+                console.error(
+                  `Failed to play video for participant ${participantId}:`,
+                  error
+                );
+                setVideoError(true);
+              });
+          }
+        } catch (error) {
+          console.error(
+            `Error setting up video stream for participant ${participantId}:`,
+            error
+          );
+          setVideoError(true);
+        }
+      } else {
+        console.log(
+          `Clearing video for participant ${participantId}: webcamOn=${webcamOn}, hasStream=${!!webcamStream}`
+        );
+        videoRef.current.srcObject = null;
+        setVideoError(false);
+      }
+    }
+  }, [webcamStream, webcamOn, participantId]);
+
+  // Check if we should show video
+  const shouldShowVideo =
+    webcamOn && webcamStream && webcamStream.track && !videoError;
+
+  return (
     <div
       onMouseEnter={() => {
         setMouseOver(true);
@@ -473,27 +532,35 @@ export function ParticipantView({ participantId }) {
       onMouseLeave={() => {
         setMouseOver(false);
       }}
-      className={`h-full w-full  bg-gray-750 relative overflow-hidden rounded-lg video-cover`}
+      className={`h-full w-full bg-gray-750 relative overflow-hidden rounded-lg video-cover`}
     >
       <audio ref={micRef} autoPlay muted={isLocal} />
-      {webcamOn ? (
-        <ReactPlayer
-          //
-          playsinline // very very imp prop
-          playIcon={<></>}
-          //
-          pip={false}
-          light={false}
-          controls={false}
-          muted={true}
-          playing={true}
-          //
-          url={webcamMediaStream}
-          //
-          height={"100%"}
-          width={"100%"}
-          onError={(err) => {
-            console.log(err, "participant video error");
+
+      {shouldShowVideo ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={isLocal}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+          onLoadedMetadata={() => {
+            console.log(
+              `Video metadata loaded for participant ${participantId}`
+            );
+          }}
+          onError={(e) => {
+            console.error(
+              `Video element error for participant ${participantId}:`,
+              e
+            );
+            setVideoError(true);
           }}
         />
       ) : (
@@ -502,11 +569,28 @@ export function ParticipantView({ participantId }) {
             className={`z-10 flex items-center justify-center rounded-full bg-gray-800 2xl:h-[92px] h-[52px] 2xl:w-[92px] w-[52px]`}
           >
             <p className="text-2xl text-white">
-              {String(displayName).charAt(0).toUpperCase()}
+              {String(displayName || "U")
+                .charAt(0)
+                .toUpperCase()}
             </p>
+          </div>
+
+          {/* Enhanced Debug info */}
+          <div className="absolute bottom-16 left-2 text-xs text-red-400 bg-black bg-opacity-50 p-1 rounded max-w-xs">
+            <div>{`ID: ${participantId.slice(0, 8)}...`}</div>
+            <div>{`Cam: ${webcamOn ? "ON" : "OFF"} | Stream: ${
+              webcamStream ? "YES" : "NO"
+            }`}</div>
+            <div>{`Track: ${webcamStream?.track ? "YES" : "NO"} | Error: ${
+              videoError ? "YES" : "NO"
+            }`}</div>
+            {webcamStream?.track && (
+              <div>{`State: ${webcamStream.track.readyState} | Enabled: ${webcamStream.track.enabled}`}</div>
+            )}
           </div>
         </div>
       )}
+
       <CornerDisplayName
         {...{
           isLocal,
@@ -520,5 +604,5 @@ export function ParticipantView({ participantId }) {
         }}
       />
     </div>
-  ) : null;
+  );
 }
